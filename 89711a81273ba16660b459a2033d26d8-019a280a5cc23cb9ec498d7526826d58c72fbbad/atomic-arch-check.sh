@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Atomic Arch / atomic-lockfile AUR campaign check
+# Read-only heuristic scan: writes no files. Exit 0 = no findings, 1 = findings. See ../README.md.
 # Sources:
 # - https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/FGXPCB3ZVCJIV7FX323SBAX2JHYB7ZS4/
 # - https://www.sonatype.com/blog/atomic-arch-npm-campaign-adds-malicious-dependency
@@ -13,8 +14,10 @@ IOC_NAMES='atomic-lockfile|js-digest|lockfile-js|nextfile-js|src/hooks/deps'
 # Command position only (start, or after ; & | ( ) { } `) so help-text mentions don't match.
 PM_ACTION='(^|[;&|(){}`])[[:space:]]*(npm|npx|pnpm|yarn|bun|bunx)[[:space:]]'
 
-# Exec mechanism, spelling-independent (pm_match): base64/base32 -d, xxd -r,
-# curl/wget piped to a shell, eval of a string/subst, $'\xNN'/$'\NNN' escapes.
+# Exec mechanism (pm_match): base64/base32 -d, xxd -r, curl/wget piped to a shell,
+# eval of a string/subst, $'\xNN'/$'\NNN' escapes. Matched on the raw text AND on the
+# de-obfuscated text, so quote-spliced forms such as `| "sh"` or `base64 -"d"` are caught.
+# The $'\xNN' forms only match raw text, because _deobf strips backslashes.
 OBF_MACHINERY='(base64|base32)[[:space:]]+-{1,2}[A-Za-z]*[dD]|xxd[[:space:]]+-[A-Za-z]*r|(curl|wget)[^|]*[|][[:space:]]*(sh|bash|zsh|dash)([^[:alnum:]_]|$)|(^|[;&|(){}`])[[:space:]]*eval[[:space:]]+["$(`]|\$'"'"'\\(x[0-9a-fA-F]|[0-7])'
 
 # Shell-startup tamper: scriptlet writing (> >> tee) into a SYSTEM /etc shell init
@@ -30,19 +33,26 @@ _is_text() {   # 0 only for a NON-EMPTY text file.
 }
 pm_match() {       # install scriptlet / hook: ANY JS pkg mgr at install time is the red flag
   _is_text "$1" || return 1
-  _deobf "$1" | grep -Eq "$PM_ACTION|$IOC_NAMES" && return 0
-  grep -EqI "$OBF_MACHINERY|$RC_TAMPER" "$1" 2>/dev/null   # machinery / shell-rc tamper on RAW text
+  # Process substitution, not a pipe: under pipefail, grep -q exiting on its first hit kills
+  # the writer with SIGPIPE, so any file larger than the pipe buffer was reported as a miss.
+  grep -Eq "$PM_ACTION|$IOC_NAMES" < <(_deobf "$1") && return 0
+  grep -EqI "$OBF_MACHINERY|$RC_TAMPER" "$1" 2>/dev/null && return 0   # machinery / shell-rc tamper on RAW text
+  grep -EqI "$OBF_MACHINERY" < <(_deobf "$1")                          # machinery on de-obfuscated text
 }
 pkgbuild_match() { # The only meaningful malicious signal in a PKGBUILD is the dep NAME.
   _is_text "$1" || return 1
-  _deobf "$1" | grep -Eq "$IOC_NAMES"
+  grep -Eq "$IOC_NAMES" < <(_deobf "$1")   # process substitution, see pm_match
 }
 # Print the matched line(s) tagged by rule, makes review easier of eventual false positives.
+# Tags share one width so the line numbers line up.
 _why() {
-  _deobf "$1" 2>/dev/null | grep -nE "$PM_ACTION"  | head -1 | sed 's/^/      │    [pkg-mgr]  /'
-  _deobf "$1" 2>/dev/null | grep -nE "$IOC_NAMES"  | head -1 | sed 's/^/      │    [ioc-name] /'
-  grep -nEI "$OBF_MACHINERY" "$1" 2>/dev/null | head -1 | sed 's/^/      │    [machinery]/'
-  grep -nEI "$RC_TAMPER"     "$1" 2>/dev/null | head -1 | sed 's/^/      │    [shell-rc] /'
+  local m
+  _deobf "$1" 2>/dev/null | grep -nE "$PM_ACTION"  | head -1 | sed 's/^/      │    [pkg-mgr]   /'
+  _deobf "$1" 2>/dev/null | grep -nE "$IOC_NAMES"  | head -1 | sed 's/^/      │    [ioc-name]  /'
+  m=$(grep -nEI "$OBF_MACHINERY" "$1" 2>/dev/null | head -1)
+  [ -n "$m" ] || m=$(_deobf "$1" 2>/dev/null | grep -nE "$OBF_MACHINERY" | head -1)
+  [ -n "$m" ] && printf '%s\n' "$m" | sed 's/^/      │    [machinery] /'
+  grep -nEI "$RC_TAMPER"     "$1" 2>/dev/null | head -1 | sed 's/^/      │    [shell-rc]  /'
 }
 pm_scan() {    # pm_scan <matcher-fn> <name-glob> <root>...  ->  prints files the matcher flags.
   local fn=$1 glob=$2; shift 2          # honors $PM_MAXDEPTH so a per-package scan can be
@@ -54,7 +64,8 @@ pm_scan() {    # pm_scan <matcher-fn> <name-glob> <root>...  ->  prints files th
 }
 
 nb_hits=0
-ebpf_ran=0   # set to 1 only if the (root-only) eBPF rootkit scan actually runs
+ebpf_mode="" # how the (root-only) eBPF scan ran: bpftool | stat | failed | none; empty = did not run
+list_ran=0   # set to 1 only if the known-impacted list was downloaded and compared
 CAMPAIGN_START='2026-06-09' # Sources vary but this is the earliest observed date of activity I found
 
 # Community-maintained reported-compromised package list (Arch HedgeDoc). Edit if it moves.
@@ -95,7 +106,12 @@ if [ -r "$log" ]; then
       ts=$1; gsub(/[][]/,"",ts); d=substr(ts,1,10)
       for(i=1;i<=NF;i++) if($i=="installed"||$i=="upgraded") print d, $(i+1)
     }' "$log" 2>/dev/null)
-  foreign=$(printf '%s\n' "$events" | grep -Fwf <(pacman -Qmq 2>/dev/null) 2>/dev/null)
+  # Exact package-name match on field 2. grep -w was wrong: '-' is a word boundary to it,
+  # so an AUR package 'foo' also matched the official package 'foo-bar'.
+  aur_names=$(pacman -Qmq 2>/dev/null)
+  foreign=$(printf '%s\n' "$events" | NAMES="$aur_names" awk '
+      BEGIN { n = split(ENVIRON["NAMES"], a, "\n"); for (i = 1; i <= n; i++) f[a[i]] = 1 }
+      NF && ($2 in f)')
   last=$(printf '%s\n' "$foreign" | awk 'NF' | sort | tail -1)
   window_hits=$(printf '%s\n' "$foreign" | awk -v s="$CAMPAIGN_START" 'NF && $1 >= s' | sort -u)
   if [ -n "$window_hits" ]; then
@@ -146,14 +162,14 @@ fi
 hits=$(printf '%s\n' "$hits" | sed '/^$/d' | sort -u)
 if [ -n "$hits" ]; then
   echo                                      # break off the inline progress label
-  echo "    FOUND (COMPROMISED):"
+  echo "    FOUND (SUSPICIOUS - heuristic match; verify each):"
   while IFS= read -r hf; do
     [ -n "$hf" ] || continue
     echo "      ├─ $hf"
     _why "$hf"                              # show the matched line(s) so False Positives are obvious
   done <<< "$hits"
   echo "      │"
-  echo "      └─ [!] Malicious install-time code; see remediation below."
+  echo "      └─ [!] Verify each entry; if one is real, see remediation below."
   echo
   nb_hits=$((nb_hits+1))
 else
@@ -175,13 +191,16 @@ elif [ -t 0 ]; then
         fetch=$(curl -fsSL --max-time 20 "$LIST_URL" 2>/dev/null)
       else
         fetch=$(wget -qO- --timeout=20 "$LIST_URL" 2>/dev/null)
-      fi ;;
+      fi
+      # A failed download used to print nothing, so the check looked finished.
+      [ -n "$fetch" ] || echo "    Download failed or empty: known-list check NOT performed." ;;
     *) echo "    SKIPPED" ;;
   esac
 else
   echo "SKIPPED (non-interactive; would download $LIST_URL)"
 fi
 if [ -n "$fetch" ]; then
+  list_ran=1
   reported=$(printf '%s' "$fetch" | tr -s ' \t\r\n' '\n' \
              | grep -E '^[a-zA-Z0-9][a-zA-Z0-9@._+-]+$' | sort -u)
   match=$(comm -12 <(pacman -Qmq 2>/dev/null | sort -u) <(printf '%s\n' "$reported"))
@@ -231,7 +250,9 @@ echo "[2/2] Checking for payload leftovers..."
 # systemd persistence fingerprint (Restart=always + RestartSec=30).
 printf "  - Scan for systemd persistence fingerprint... "
 review=""
-for unit in /etc/systemd/system/*.service ~/.config/systemd/user/*.service; do
+# systemd also loads user units from /etc/systemd/user and $XDG_CONFIG_HOME/systemd/user.
+for unit in /etc/systemd/system/*.service /etc/systemd/user/*.service \
+            "${XDG_CONFIG_HOME:-$HOME/.config}"/systemd/user/*.service; do
   [ -f "$unit" ] || continue
   if grep -q '^Restart=always' "$unit" 2>/dev/null \
      && grep -q '^RestartSec=30' "$unit" 2>/dev/null; then
@@ -282,15 +303,18 @@ if [ -t 0 ]; then
   # pinned it at one of the known IOC names, and a rootkit hiding pins from getdents64
   # can hide them from stat() too.
   ebpf_scan() {
-    if ! mountpoint -q /sys/fs/bpf 2>/dev/null; then
-      echo "    bpffs not mounted at /sys/fs/bpf - nothing to check" >&2
-      return 0
-    fi
+    # bpftool needs no bpffs mount (it lists maps by ID), so it is tried first and
+    # the bpffs mount is only required for the stat() fallback below.
     if command -v bpftool >/dev/null 2>&1; then
       echo >&2
-      echo "    Method: bpftool map list (asks the kernel directly)" >&2
-      local all
-      all=$(bpftool map list 2>/dev/null)
+      echo "    Method: bpftool map list (asks the kernel directly; does not need bpffs)" >&2
+      local all rc
+      all=$(bpftool map list 2>/dev/null); rc=$?
+      if [ "$rc" -ne 0 ]; then
+        echo "    bpftool map list failed (exit $rc): nothing was verified." >&2
+        echo "__METHOD__=failed"
+        return 0
+      fi
       # Known-IOC names => hard hit on stdout (counts toward findings).
       printf '%s\n' "$all" | grep -Eo 'hidden_(pids|names|inodes)' | sort -u
       # Triage the rest: collapse each map to one line (id/type/name/owner) and
@@ -325,13 +349,20 @@ if [ -t 0 ]; then
         echo "      (all maps belong to known system services; nothing unexpected)" >&2
       fi
       # Report the review count back to the caller
+      echo "__METHOD__=bpftool"
       echo "__TOREVIEW__=$toreview"
     else
+      if ! mountpoint -q /sys/fs/bpf 2>/dev/null; then
+        echo "    bpftool is absent and bpffs is not mounted at /sys/fs/bpf: nothing to check" >&2
+        echo "__METHOD__=none"
+        return 0
+      fi
       echo "    Method: stat() on known paths (bpftool absent; best-effort, only the 3 known pin names)" >&2
       echo "    Tip: 'sudo pacman -S bpf' and run this script again for a reliable, pin-independent scan" >&2
       for f in /sys/fs/bpf/hidden_pids /sys/fs/bpf/hidden_names /sys/fs/bpf/hidden_inodes; do
         [ -e "$f" ] && echo "$f"
       done
+      echo "__METHOD__=stat"
     fi
   }
   echo "    Will use 'bpftool' if available, else direct stat(), to dodge a compromised getdents64()."
@@ -352,12 +383,12 @@ if [ -t 0 ]; then
         echo
         continue ;;
       [yY]*)
-        ebpf_ran=1
         echo
         out=$(sudo bash -c "$(declare -f ebpf_scan); ebpf_scan")
-        # Split off the review-count marker; what remains is the IOC-name hit list.
+        # Split off the markers; what remains is the IOC-name hit list.
+        ebpf_mode=$(printf '%s\n' "$out" | sed -n 's/^__METHOD__=//p')
         toreview=$(printf '%s\n' "$out" | sed -n 's/^__TOREVIEW__=//p')
-        maps=$(printf '%s\n' "$out" | grep -v '^__TOREVIEW__=')
+        maps=$(printf '%s\n' "$out" | grep -v '^__[A-Z]*__=')
         echo
         if [ -n "$maps" ]; then
           echo "    FOUND:"
@@ -365,10 +396,18 @@ if [ -t 0 ]; then
           echo "      │"
           echo "      └─ [!] eBPF rootkit maps present; treat the host as fully compromised."
           nb_hits=$((nb_hits+1))
-        elif [ "${toreview:-0}" -gt 0 ]; then
+        elif [ "$ebpf_mode" = bpftool ] && [ "${toreview:-0}" -gt 0 ]; then
           echo "    No known-IOC map names matched (see the triage above for the $toreview map(s) to review)."
-        else
+        elif [ "$ebpf_mode" = bpftool ]; then
           echo "    No known-IOC map names matched; all maps belong to known system services."
+        elif [ "$ebpf_mode" = stat ]; then
+          echo "    No known pin names found. This is a PARTIAL check (stat() only, bpftool absent)."
+        elif [ "$ebpf_mode" = failed ]; then
+          echo "    NOT VERIFIED: bpftool could not list maps (see the error above)."
+        elif [ "$ebpf_mode" = none ]; then
+          echo "    NOT VERIFIED: bpftool is absent and bpffs is not mounted, so nothing was checked."
+        else
+          echo "    NOT VERIFIED: the check returned no result (sudo failed or was cancelled?)."
         fi
         break ;;
       *)
@@ -377,7 +416,7 @@ if [ -t 0 ]; then
     esac
   done
 else
-  echo "SKIPPED (needs root)"
+  echo "SKIPPED (non-interactive: run from a terminal to get the sudo prompt)"
 fi
 echo
 
@@ -387,11 +426,18 @@ echo "$rule"
 if [ "$nb_hits" -eq 0 ]; then
   echo "LIKELY CLEAN: no Atomic Arch payload found."
   echo "$lightrule"
-  [ "$ebpf_ran" -eq 0 ] && echo "  - eBPF rootkit check did NOT run."
+  case "$ebpf_mode" in
+    bpftool) ;;
+    stat)   echo "  - eBPF rootkit check was PARTIAL: stat() on known pin names only (bpftool absent)." ;;
+    failed) echo "  - eBPF rootkit check did NOT complete: bpftool could not list maps." ;;
+    none)   echo "  - eBPF rootkit check did NOT run: bpftool absent and bpffs not mounted." ;;
+    *)      echo "  - eBPF rootkit check did NOT run." ;;
+  esac
+  [ "$list_ran" -eq 0 ] && echo "  - Known-impacted package list was NOT checked."
   [ -n "$review" ] && echo "  - Confirm the 'TO REVIEW' unit(s) above are yours."
   [ -n "$window_hits" ] && echo "  - You updated AUR package(s) in the campaign window."
 else
-  echo "/!\\ IMPACTED /!\\: $nb_hits finding(s) above. See the FOUND lines."
+  echo "/!\\ POSSIBLE IMPACT /!\\: $nb_hits finding(s) above. Verify each FOUND line."
   echo "$lightrule"
   echo "This payload is a credential stealer. If it ran, act now:"
   echo
@@ -406,3 +452,8 @@ else
   echo "     prefer 'npm install --ignore-scripts' for any manual npm/bun use."
 fi
 echo "$rule"
+
+# Exit status for scripting: 0 = no findings, 1 = at least one finding. Skipped checks do
+# not change it; the summary above lists them.
+if [ "$nb_hits" -eq 0 ]; then exit 0; fi
+exit 1

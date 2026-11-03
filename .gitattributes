@@ -1,0 +1,4 @@
+# Bash scripts and patches must keep LF endings. Git for Windows sets core.autocrlf=true
+# system-wide, which would check them out with CRLF, and CRLF can break a bash script.
+*.sh     text eol=lf
+*.patch  text eol=lf
