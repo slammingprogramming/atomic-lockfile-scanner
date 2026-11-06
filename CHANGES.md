@@ -138,7 +138,30 @@ Two weaknesses in the harness were found and fixed during the work:
 - bpftool output was assumed from the standard `bpftool map list` layout (`N: type name ...` followed by `pids owner(pid)`). Not run against a real bpftool.
 - The package name `bpf` in the script's install hint has not been checked against a live Arch system.
 - The `pacman -Qmq`, `-Q`, `-Qo` usage was checked against the test stub only.
-- The IOC names, the campaign start date, and the known-package list URL come from the sources in the script header and were not re-checked against those sources here.
+- Source re-check, 2026-11-05 (partial, see "Source re-check" below). Not yet done: the Sonatype and ioctl.fail details were read through a summarizer, not as raw text.
+
+## Source re-check (2026-11-05)
+
+No script change came out of this. Rule 1 (a change needs a stated reason and a test that fails before it) was not met by any candidate.
+
+**Confirmed**
+- `IOC_NAMES`, `CAMPAIGN_START`, and `LIST_URL` match the original gist exactly (fetched twice).
+- `atomic-lockfile` and `src/hooks/deps`: ioctl.fail. `atomic-lockfile` also: Sonatype and the Arch thread.
+- `js-digest` and `lockfile-js`: Sonatype (second wave) and the Arch aur-general thread. The thread says `lockfile-js` was renamed from `atomic-lockfile`.
+- `LIST_URL` loads as a plain-text list of about 2,000 names. It was not compared against anything here.
+- Real install lines from the thread, each written to a temp file and passed to `pm_match`, are all flagged, and a clean scriptlet is not: `npm install atomic-lockfile ...` in an `.install` file, `/bin/sh -c 'cd /tmp && npm install atomic-lockfile ... 2>/dev/null; exit 0'` in a `.hook` file, `bun add execa js-digest commander`, and `npm install lockfile-js ...`.
+
+**Not confirmed**
+- **`nextfile-js`** appears only in the gist. It is absent from the first page of the Arch thread, from Sonatype, and from ioctl.fail. Kept, because it costs nothing and removing it needs evidence that it is wrong.
+- **`CAMPAIGN_START='2026-06-09'`**: no readable source gives a start date. The first message in the thread is 11 Jun 2026, 8:47 p.m.; Sonatype and ioctl.fail date publication to 11 and 12 June. The gist's value is its author's "earliest observed" note. Nothing contradicts it, nothing confirms it. Kept.
+- Package counts disagree (about 1,500 Sonatype, "1500+" gist, about 2,000 list). All are estimates.
+- The Arch thread's later pages did not load through the pager, so only its first page (up to 13 Jun) was read. Both aur-general pages were blocked for the research subagent by an Anubis check and loaded in the built-in browser.
+
+**Candidates not adopted**
+- **`./lib/install-deps.mjs`** (Sonatype: the preinstall hook inside `js-digest` and `lockfile-js`). That file lives in the npm package, not in a PKGBUILD, `.install`, or `.hook` file, which are what the script scans. The package names are already matched. The Arch thread shows the malicious lines as plain `npm install`/`bun add` commands. No test can fail on it, so no rule.
+- **File hashes, `scales.bpf.c`, `temp.sh`, `POST /api/agent`, `.onion` host, generated service names.** Not artefacts of the files or pins this script reads.
+- **`minimist` and `chalk`.** Cover packages installed with `atomic-lockfile`, also used by legitimate software. Matching them would give false positives.
+- **Version pinning** (`atomic-lockfile 1.4.2`). The IOC match is name-only on purpose.
 
 ## Files
 
