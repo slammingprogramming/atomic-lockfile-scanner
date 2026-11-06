@@ -50,6 +50,10 @@ printf "echo 'x' >> /etc/bash.bashrc\n"                > "$U/rc-tamper.install"
 printf 'echo "documentation about npm"\n'               > "$U/benign-text.install"
 printf 'base64 input.txt > out.b64\n'                   > "$U/benign-encode.install"
 printf 'curl -o file.tgz http://example.test/f.tgz\n'   > "$U/benign-download.install"
+printf 'source=("x")\nprepare() {\n  cp ./lib/install-deps.mjs "$srcdir"\n}\n' > "$U/mjs.PKGBUILD"
+printf 'post_install() {\n  cp ./lib/install-deps.mjs /opt\n}\n'              > "$U/mjs.install"
+printf 'prepare() {\n  cp ./lib/"install-deps.mjs" "$srcdir"\n}\n'              > "$U/mjs-splice.PKGBUILD"
+printf 'prepare() {\n  ./scripts/install-deps.sh\n}\n'                           > "$U/benign-deps.PKGBUILD"
 
 echo "unit: pm_match / pkgbuild_match"
 expect hit  "npm in a small install scriptlet"                pm_match "$U/small.install"
@@ -62,6 +66,26 @@ expect miss "npm mentioned in plain text"                     pm_match "$U/benig
 expect miss "base64 encode without -d"                        pm_match "$U/benign-encode.install"
 expect miss "curl download with no pipe to a shell"           pm_match "$U/benign-download.install"
 expect hit  "IOC dep name in a PKGBUILD over 64 KiB"          pkgbuild_match "$U/big.PKGBUILD"
+expect hit  "payload hook lib/install-deps.mjs in a PKGBUILD"  pkgbuild_match "$U/mjs.PKGBUILD"
+expect hit  "payload hook lib/install-deps.mjs in a scriptlet" pm_match "$U/mjs.install"
+expect hit  "quote-spliced lib/install-deps.mjs in a PKGBUILD" pkgbuild_match "$U/mjs-splice.PKGBUILD"
+expect miss "unrelated install-deps.sh in a PKGBUILD"          pkgbuild_match "$U/benign-deps.PKGBUILD"
+
+echo "unit: payload_hash_match / _exec_path"
+REAL_SHA=${PAYLOAD_SHA256:-}
+if [[ $REAL_SHA =~ ^[0-9a-f]{64}$ ]]; then ok "PAYLOAD_SHA256 is 64 lowercase hex characters"; else bad "PAYLOAD_SHA256 is 64 lowercase hex characters"; fi
+printf 'payload-bytes' > "$U/payload.bin"; printf 'other-bytes' > "$U/other.bin"
+PAYLOAD_SHA256=$(sha256sum "$U/payload.bin" | cut -d' ' -f1)
+expect hit  "file with the payload SHA-256"                   payload_hash_match "$U/payload.bin"
+expect miss "file with a different SHA-256"                   payload_hash_match "$U/other.bin"
+expect miss "missing file"                                    payload_hash_match "$U/nope.bin"
+expect miss "directory"                                       payload_hash_match "$U"
+PAYLOAD_SHA256=$REAL_SHA
+expect miss "payload file against the real SHA-256"           payload_hash_match "$U/payload.bin"
+for pair in 'ExecStart=/var/lib/foo --x|/var/lib/foo' 'ExecStart=-/opt/x|/opt/x' 'ExecStart=!!/opt/y arg|/opt/y' 'ExecStart=@/opt/z name|/opt/z'; do
+  in=${pair%%|*}; want=${pair##*|}; got=$(_exec_path "$in")
+  if [ "$got" = "$want" ]; then ok "_exec_path: $in"; else bad "_exec_path: $in (got '$got')"; fi
+done
 
 echo "unit: _why"
 why=$(_why "$U/splice-b64.install" 2>&1)
@@ -114,7 +138,7 @@ run_scan() {
       -e "s#/etc/pacman.d#$r/etc/pacman.d#g" \
       -e "s#/etc/systemd/system#$r/etc/systemd/system#g" \
       -e "s#/etc/systemd/user#$r/etc/systemd/user#g" \
-      -e "s#/usr/bin/monero-wallet-gui#$r/usr/bin/monero-wallet-gui#g" \
+      -e "s#/usr/bin/monero-wallet-gui#$r/usr/bin/monero-wallet-gui#g"       -e "s#^PAYLOAD_SHA256='[0-9a-f]*'#PAYLOAD_SHA256='${PAYLOAD_OVERRIDE:-$REAL_SHA}'#" \
       "$SCRIPT" > "$r/scan.sh"
   PATH="$r/bin:$PATH" HOME="$r/home" FX="$r" \
   XDG_CACHE_HOME="$r/xdg-cache" XDG_CONFIG_HOME="$r/xdg-config" \
@@ -185,6 +209,22 @@ if [ "$(cat "$WORK/infected/rc")" = 1 ]; then ok "infected: exit status 1"; else
 contains "infected: finding is labelled as a heuristic (SUSPICIOUS)" "$I" "FOUND (SUSPICIOUS"
 contains "infected: finding names the scriptlet"              "$I" "evilpkg-1.0-1/install"
 contains "infected: verdict is POSSIBLE IMPACT"               "$I" "POSSIBLE IMPACT"
+
+# ExecStart binary hash: the unit is found by the Restart fingerprint, then its binary is hashed.
+echo "integration: ExecStart binary hash"
+make_tree "$WORK/hashtree" 0
+HT=$WORK/hashtree
+printf 'payload-bytes' > "$HT/payload"
+printf '[Service]
+ExecStart=%s --run
+Restart=always
+RestartSec=30
+' "$HT/payload" > "$HT/etc/systemd/system/gen.service"
+run_scan "$HT"
+absent   "hash: different binary is not reported as the payload" "$HT/out.txt" "matches the SHA-256"
+contains "hash: unit is still listed for review"               "$HT/out.txt" "gen.service"
+PAYLOAD_OVERRIDE=$(sha256sum "$HT/payload" | cut -d' ' -f1) run_scan "$HT"
+contains "hash: matching binary is reported"                   "$HT/out.txt" "matches the SHA-256"
 
 echo
 echo "$pass passed, $fail failed"

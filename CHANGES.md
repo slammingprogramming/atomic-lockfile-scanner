@@ -8,7 +8,7 @@ Committed in a git repository (branch `main`). The tag `as-received` marks the f
 
 - Baseline: the script as received. A pristine copy was kept outside the project and is the reference for `CHANGES.patch`.
 - `bash -n` on the modified script: clean.
-- `tests/run-tests.sh` (35 checks) run against both the original and the modified script.
+- `tests/run-tests.sh` (52 checks) run against both the original and the modified script.
 - Each defect was shown to fail on the original first, then fixed, then shown to pass.
 - Not available here: Arch Linux, real bpftool, sudo, and a terminal. Anything that depends on those is marked **read only** below. It was checked by reading, not by running.
 - A "CRLF line endings" concern raised during review was a false alarm. `tr -cd '\r' | wc -c` returns 0; the file is LF throughout and `bash -n` is clean.
@@ -17,10 +17,10 @@ Committed in a git repository (branch `main`). The tag `as-received` marks the f
 
 | Script | Passed | Failed |
 |---|---|---|
-| Original (as received) | 14 | 21 |
-| Modified | 35 | 0 |
+| Original (as received) | 21 | 31 |
+| Modified | 52 | 0 |
 
-Diff size: 81 lines added, 30 removed (`CHANGES.patch`).
+Diff size: 102 lines added, 32 removed (`CHANGES.patch`).
 
 ## Changes to the script
 
@@ -106,9 +106,27 @@ Three separate paths, all reporting a result they had not established:
 - **Before:** the comment said the matching was "spelling-independent". That was false for quote-spliced forms (change 2).
 - **Change:** the comment now says matching runs on raw and de-obfuscated text, and that the `$'\xNN'` forms match raw text only. Comment only, no behaviour change.
 
+### 13. Payload hook `lib/install-deps.mjs` added to `IOC_NAMES` (detection)
+
+- **Reason:** requested by the owner on 2026-11-05. Sonatype names `./lib/install-deps.mjs` as the preinstall hook of the second-wave npm packages (`js-digest`, `lockfile-js`). A PKGBUILD, `.install`, or `.hook` that copies or runs it points at the same payload.
+- **Change:** `lib/install-deps\.mjs` appended to `IOC_NAMES`. It is matched on de-obfuscated text, so quote-spliced forms are caught.
+- **Evidence:** four new unit tests. Before the change the three hit tests failed (PKGBUILD, scriptlet, quote-spliced) and the miss test (`./scripts/install-deps.sh`) passed. After it all four pass.
+- **Limits:** the string was confirmed on the raw Sonatype page (`"preinstall": "./lib/install-deps.mjs"`, in `lockfile-js`, which does not ship the `lib` directory). The Arch thread shows no PKGBUILD or scriptlet that contains it, so this is a precaution, not a rule seen firing on a real sample. The package names are already matched.
+
+### 14. ExecStart binary hashed against the analysed payload (detection)
+
+- **Reason:** requested by the owner on 2026-11-05 ("hashes and network indicators"). ioctl.fail publishes SHA-256 `6144d433...c98b` (3,040,376 bytes) for the ELF payload. The systemd check already finds the persistence unit; hashing its `ExecStart` binary turns "confirm you installed this" into a definite match when it is the analysed payload.
+- **Change:** `PAYLOAD_SHA256`, `payload_hash_match` and `_exec_path` added above `nb_hits=0`. In the systemd loop, a matching unit's binary is hashed and a `[!] binary matches the SHA-256 of the analysed payload` note is appended. It adds no new finding and does not change the exit status. If `sha256sum` is missing, nothing is reported.
+- **Evidence:** 13 new tests (hash equal, different, missing, directory, real constant versus a fixture, `ExecStart` prefixes, and three integration runs). Before the change the harness aborted at `PAYLOAD_SHA256: unbound variable`. After it all pass.
+- **Limits:** one sample. The hash was read from the raw ioctl.fail page and its format is checked by a test, but the on-host binary may differ per build or be rewritten, so a mismatch proves nothing. Never run on a real host. The MD5 ioctl.fail also lists was not added.
+
+### Network indicators: not added
+
+Read from the raw ioctl.fail page: `temp.sh`, `POST /api/agent`, `POST /upload` and the onion host appear inside the ELF payload. The page says there are "no package-layer references" to them, so they are absent from PKGBUILDs, `.install` and `.hook` files, which are the only text the script scans. A rule could not fire on this campaign, and `temp.sh` or `/api/agent` as bare substrings could match legitimate scripts. The same applies to `scales.bpf.c` (named in the `lockfile-js` package.json). Network logs are outside the script's scope; ioctl.fail's own advice is to review HTTP/proxy logs for `temp.sh` and `POST /upload`.
+
 ## Test harness (new file, not a change to the scanner)
 
-`tests/run-tests.sh` was written for this review. It has 35 checks.
+`tests/run-tests.sh` was written for this review. It has 52 checks.
 
 - **Unit tests** source the detection rules (lines before the first state-changing line, `nb_hits=0`) and call them on fixture files. The eBPF function is extracted with `sed` and tested with stubs.
 - **Integration tests** run a copy of the whole script with its absolute system paths rewritten into a temp tree. `HOME` and the XDG directories point into the same temp tree. A stub `pacman` is first on PATH.
@@ -138,7 +156,7 @@ Two weaknesses in the harness were found and fixed during the work:
 - bpftool output was assumed from the standard `bpftool map list` layout (`N: type name ...` followed by `pids owner(pid)`). Not run against a real bpftool.
 - The package name `bpf` in the script's install hint has not been checked against a live Arch system.
 - The `pacman -Qmq`, `-Q`, `-Qo` usage was checked against the test stub only.
-- Source re-check, 2026-11-05 (partial, see "Source re-check" below). Not yet done: the Sonatype and ioctl.fail details were read through a summarizer, not as raw text.
+- Source re-check, 2026-11-05 (partial, see "Source re-check" below). Later the same day ioctl.fail and Sonatype were read as raw text (changes 13 and 14).
 
 ## Source re-check (2026-11-05)
 
@@ -157,7 +175,7 @@ No script change came out of this. Rule 1 (a change needs a stated reason and a 
 - Package counts disagree (about 1,500 Sonatype, "1500+" gist, about 2,000 list). All are estimates.
 - The Arch thread's later pages did not load through the pager, so only its first page (up to 13 Jun) was read. Both aur-general pages were blocked for the research subagent by an Anubis check and loaded in the built-in browser.
 
-**Candidates not adopted**
+**Candidates not adopted** (update: `lib/install-deps.mjs` was adopted on request, see change 13; the owner declined `minimist`/`chalk`; hashes were adopted as change 14; network indicators were not, see change 14)
 - **`./lib/install-deps.mjs`** (Sonatype: the preinstall hook inside `js-digest` and `lockfile-js`). That file lives in the npm package, not in a PKGBUILD, `.install`, or `.hook` file, which are what the script scans. The package names are already matched. The Arch thread shows the malicious lines as plain `npm install`/`bun add` commands. No test can fail on it, so no rule.
 - **File hashes, `scales.bpf.c`, `temp.sh`, `POST /api/agent`, `.onion` host, generated service names.** Not artefacts of the files or pins this script reads.
 - **`minimist` and `chalk`.** Cover packages installed with `atomic-lockfile`, also used by legitimate software. Matching them would give false positives.

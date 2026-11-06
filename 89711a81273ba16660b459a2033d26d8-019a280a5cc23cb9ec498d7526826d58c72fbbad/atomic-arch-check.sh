@@ -8,7 +8,7 @@
 set -uo pipefail
 
 # Malicious npm dep names this campaign rotates through, plus the payload path.
-IOC_NAMES='atomic-lockfile|js-digest|lockfile-js|nextfile-js|src/hooks/deps'
+IOC_NAMES='atomic-lockfile|js-digest|lockfile-js|nextfile-js|src/hooks/deps|lib/install-deps\.mjs'
 
 # A JS pkg manager executed from an install scriptlet/hook is almost certainly bad.
 # Command position only (start, or after ; & | ( ) { } `) so help-text mentions don't match.
@@ -61,6 +61,22 @@ pm_scan() {    # pm_scan <matcher-fn> <name-glob> <root>...  ->  prints files th
   while IFS= read -r -d '' f; do
     "$fn" "$f" && printf '%s\n' "$f"
   done < <(find "$@" "${md[@]}" -type f -name "$glob" -print0 2>/dev/null)
+}
+
+# SHA-256 of the ELF payload analysed at https://ioctl.fail/preliminary-analysis-of-aur-malware/
+# (3,040,376 bytes). It is checked only against the ExecStart binary of a unit that already
+# matched the Restart fingerprint. A match is strong evidence; a mismatch proves nothing.
+PAYLOAD_SHA256='6144d433f8a0316869877b5f834c801251bbb936e5f1577c5680878c7443c98b'
+payload_hash_match() {   # 0 only for a regular file whose SHA-256 equals PAYLOAD_SHA256
+  local h
+  [ -f "$1" ] || return 1
+  h=$(sha256sum "$1" 2>/dev/null) || return 1
+  [ "${h%% *}" = "$PAYLOAD_SHA256" ]
+}
+_exec_path() {   # "ExecStart=-/opt/x --arg" -> /opt/x (drops systemd's -@:+! prefixes and the arguments)
+  local v=${1#ExecStart=}
+  while [[ $v == [-@:+!]* ]]; do v=${v#?}; done
+  printf '%s\n' "${v%%[[:space:]]*}"
 }
 
 nb_hits=0
@@ -256,7 +272,10 @@ for unit in /etc/systemd/system/*.service /etc/systemd/user/*.service \
   [ -f "$unit" ] || continue
   if grep -q '^Restart=always' "$unit" 2>/dev/null \
      && grep -q '^RestartSec=30' "$unit" 2>/dev/null; then
-    review+="      ├─ $unit  ->  $(grep -m1 '^ExecStart=' "$unit" 2>/dev/null)"$'\n'
+    es=$(grep -m1 '^ExecStart=' "$unit" 2>/dev/null)
+    note=""
+    payload_hash_match "$(_exec_path "$es")" && note="  [!] binary matches the SHA-256 of the analysed payload"
+    review+="      ├─ $unit  ->  $es$note"$'\n'
   fi
 done
 if [ -n "$review" ]; then

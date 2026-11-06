@@ -7,7 +7,14 @@
  # Sources:
  # - https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/FGXPCB3ZVCJIV7FX323SBAX2JHYB7ZS4/
  # - https://www.sonatype.com/blog/atomic-arch-npm-campaign-adds-malicious-dependency
-@@ -13,8 +14,10 @@
+@@ -7,14 +8,16 @@
+ set -uo pipefail
+ 
+ # Malicious npm dep names this campaign rotates through, plus the payload path.
+-IOC_NAMES='atomic-lockfile|js-digest|lockfile-js|nextfile-js|src/hooks/deps'
++IOC_NAMES='atomic-lockfile|js-digest|lockfile-js|nextfile-js|src/hooks/deps|lib/install-deps\.mjs'
+ 
+ # A JS pkg manager executed from an install scriptlet/hook is almost certainly bad.
  # Command position only (start, or after ; & | ( ) { } `) so help-text mentions don't match.
  PM_ACTION='(^|[;&|(){}`])[[:space:]]*(npm|npx|pnpm|yarn|bun|bunx)[[:space:]]'
  
@@ -54,9 +61,26 @@
  }
  pm_scan() {    # pm_scan <matcher-fn> <name-glob> <root>...  ->  prints files the matcher flags.
    local fn=$1 glob=$2; shift 2          # honors $PM_MAXDEPTH so a per-package scan can be
-@@ -54,7 +64,8 @@
+@@ -53,8 +63,25 @@
+   done < <(find "$@" "${md[@]}" -type f -name "$glob" -print0 2>/dev/null)
  }
  
++# SHA-256 of the ELF payload analysed at https://ioctl.fail/preliminary-analysis-of-aur-malware/
++# (3,040,376 bytes). It is checked only against the ExecStart binary of a unit that already
++# matched the Restart fingerprint. A match is strong evidence; a mismatch proves nothing.
++PAYLOAD_SHA256='6144d433f8a0316869877b5f834c801251bbb936e5f1577c5680878c7443c98b'
++payload_hash_match() {   # 0 only for a regular file whose SHA-256 equals PAYLOAD_SHA256
++  local h
++  [ -f "$1" ] || return 1
++  h=$(sha256sum "$1" 2>/dev/null) || return 1
++  [ "${h%% *}" = "$PAYLOAD_SHA256" ]
++}
++_exec_path() {   # "ExecStart=-/opt/x --arg" -> /opt/x (drops systemd's -@:+! prefixes and the arguments)
++  local v=${1#ExecStart=}
++  while [[ $v == [-@:+!]* ]]; do v=${v#?}; done
++  printf '%s\n' "${v%%[[:space:]]*}"
++}
++
  nb_hits=0
 -ebpf_ran=0   # set to 1 only if the (root-only) eBPF rootkit scan actually runs
 +ebpf_mode="" # how the (root-only) eBPF scan ran: bpftool | stat | failed | none; empty = did not run
@@ -64,7 +88,7 @@
  CAMPAIGN_START='2026-06-09' # Sources vary but this is the earliest observed date of activity I found
  
  # Community-maintained reported-compromised package list (Arch HedgeDoc). Edit if it moves.
-@@ -95,7 +106,12 @@
+@@ -95,7 +122,12 @@
        ts=$1; gsub(/[][]/,"",ts); d=substr(ts,1,10)
        for(i=1;i<=NF;i++) if($i=="installed"||$i=="upgraded") print d, $(i+1)
      }' "$log" 2>/dev/null)
@@ -78,7 +102,7 @@
    last=$(printf '%s\n' "$foreign" | awk 'NF' | sort | tail -1)
    window_hits=$(printf '%s\n' "$foreign" | awk -v s="$CAMPAIGN_START" 'NF && $1 >= s' | sort -u)
    if [ -n "$window_hits" ]; then
-@@ -146,14 +162,14 @@
+@@ -146,14 +178,14 @@
  hits=$(printf '%s\n' "$hits" | sed '/^$/d' | sort -u)
  if [ -n "$hits" ]; then
    echo                                      # break off the inline progress label
@@ -95,7 +119,7 @@
    echo
    nb_hits=$((nb_hits+1))
  else
-@@ -175,13 +191,16 @@
+@@ -175,13 +207,16 @@
          fetch=$(curl -fsSL --max-time 20 "$LIST_URL" 2>/dev/null)
        else
          fetch=$(wget -qO- --timeout=20 "$LIST_URL" 2>/dev/null)
@@ -113,7 +137,7 @@
    reported=$(printf '%s' "$fetch" | tr -s ' \t\r\n' '\n' \
               | grep -E '^[a-zA-Z0-9][a-zA-Z0-9@._+-]+$' | sort -u)
    match=$(comm -12 <(pacman -Qmq 2>/dev/null | sort -u) <(printf '%s\n' "$reported"))
-@@ -231,7 +250,9 @@
+@@ -231,11 +266,16 @@
  # systemd persistence fingerprint (Restart=always + RestartSec=30).
  printf "  - Scan for systemd persistence fingerprint... "
  review=""
@@ -124,7 +148,15 @@
    [ -f "$unit" ] || continue
    if grep -q '^Restart=always' "$unit" 2>/dev/null \
       && grep -q '^RestartSec=30' "$unit" 2>/dev/null; then
-@@ -282,15 +303,18 @@
+-    review+="      ├─ $unit  ->  $(grep -m1 '^ExecStart=' "$unit" 2>/dev/null)"$'\n'
++    es=$(grep -m1 '^ExecStart=' "$unit" 2>/dev/null)
++    note=""
++    payload_hash_match "$(_exec_path "$es")" && note="  [!] binary matches the SHA-256 of the analysed payload"
++    review+="      ├─ $unit  ->  $es$note"$'\n'
+   fi
+ done
+ if [ -n "$review" ]; then
+@@ -282,15 +322,18 @@
    # pinned it at one of the known IOC names, and a rootkit hiding pins from getdents64
    # can hide them from stat() too.
    ebpf_scan() {
@@ -150,7 +182,7 @@
        # Known-IOC names => hard hit on stdout (counts toward findings).
        printf '%s\n' "$all" | grep -Eo 'hidden_(pids|names|inodes)' | sort -u
        # Triage the rest: collapse each map to one line (id/type/name/owner) and
-@@ -325,13 +349,20 @@
+@@ -325,13 +368,20 @@
          echo "      (all maps belong to known system services; nothing unexpected)" >&2
        fi
        # Report the review count back to the caller
@@ -171,7 +203,7 @@
      fi
    }
    echo "    Will use 'bpftool' if available, else direct stat(), to dodge a compromised getdents64()."
-@@ -352,12 +383,12 @@
+@@ -352,12 +402,12 @@
          echo
          continue ;;
        [yY]*)
@@ -187,7 +219,7 @@
          echo
          if [ -n "$maps" ]; then
            echo "    FOUND:"
-@@ -365,10 +396,18 @@
+@@ -365,10 +415,18 @@
            echo "      │"
            echo "      └─ [!] eBPF rootkit maps present; treat the host as fully compromised."
            nb_hits=$((nb_hits+1))
@@ -208,7 +240,7 @@
          fi
          break ;;
        *)
-@@ -377,7 +416,7 @@
+@@ -377,7 +435,7 @@
      esac
    done
  else
@@ -217,7 +249,7 @@
  fi
  echo
  
-@@ -387,11 +426,18 @@
+@@ -387,11 +445,18 @@
  if [ "$nb_hits" -eq 0 ]; then
    echo "LIKELY CLEAN: no Atomic Arch payload found."
    echo "$lightrule"
@@ -238,7 +270,7 @@
    echo "$lightrule"
    echo "This payload is a credential stealer. If it ran, act now:"
    echo
-@@ -406,3 +452,8 @@
+@@ -406,3 +471,8 @@
    echo "     prefer 'npm install --ignore-scripts' for any manual npm/bun use."
  fi
  echo "$rule"
