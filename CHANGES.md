@@ -20,7 +20,7 @@ Committed in a git repository (branch `main`). The tag `as-received` marks the f
 | Original (as received) | 21 | 31 |
 | Modified | 52 | 0 |
 
-Diff size: 102 lines added, 32 removed (`CHANGES.patch`).
+Diff size: 104 lines added, 32 removed (`CHANGES.patch`).
 
 ## Changes to the script
 
@@ -124,6 +124,15 @@ Three separate paths, all reporting a result they had not established:
 
 Read from the raw ioctl.fail page: `temp.sh`, `POST /api/agent`, `POST /upload` and the onion host appear inside the ELF payload. The page says there are "no package-layer references" to them, so they are absent from PKGBUILDs, `.install` and `.hook` files, which are the only text the script scans. A rule could not fire on this campaign, and `temp.sh` or `/api/agent` as bare substrings could match legitimate scripts. The same applies to `scales.bpf.c` (named in the `lockfile-js` package.json). Network logs are outside the script's scope; ioctl.fail's own advice is to review HTTP/proxy logs for `temp.sh` and `POST /upload`.
 
+### 15. Contact and support details added (documentation)
+
+- **Reason:** requested by the owner on 2026-11-19: add the contact link, the Ko-fi link, and the BTC, ETH, and XMR addresses to the docs and program "as appropriate".
+- **Change:** new "Contact and support" section at the end of `README.md`; two comment lines in the script header (contact and Ko-fi, with a pointer to the README for the crypto addresses). No code or behaviour change.
+- **Not done, on purpose:** the script does not print any of this at run time. It is a read-only check that may run in automation, and its output may be logged or parsed. An unrequested banner is noise, and payment addresses printed by a security tool are a bigger trust problem than the same addresses in a README.
+- **Evidence:** `bash -n` clean; `tests/run-tests.sh` still 52/52. Each link and address in `README.md` was compared character for character with the text the owner supplied. This is a documentation and comment change with no behaviour to test, like changes 11 and 12, so there is no failing-first test.
+- **Checksums:** the Bitcoin address passes the bech32m checksum (BIP 350, prefix `sp`); the Ethereum address passes its EIP-55 mixed-case checksum; the Monero address passes its base58 checksum and is a standard mainnet address (network byte 42). A valid checksum shows the text was copied without a typo. It does not show who controls the wallet.
+- **Limits:** nothing was checked on a network, and the wallets' ownership was not verified.
+
 ## Test harness (new file, not a change to the scanner)
 
 `tests/run-tests.sh` was written for this review. It has 52 checks.
@@ -135,6 +144,17 @@ Two weaknesses in the harness were found and fixed during the work:
 
 - **Weak assertion.** The eBPF-reason check first matched the known-list line's text, so it passed on the original. It now matches the exact eBPF wording.
 - **Stub shebang.** Stubs used `#!/usr/bin/env bash`. Where PATH is set to the stub directory alone, `env` cannot find `bash`, so the stub exited 127. The `mountpoint` stub was affected: the stat test failed for that reason, and the no-bpffs test passed only because 127 reads as "not mounted". Stubs now use `#!/bin/sh`.
+
+## Privacy check (2026-11-19)
+
+Requested by the owner. Scope: the 8 tracked files, the full content of all commits (`git log -p --all`), untracked and ignored files, and `.git/config`.
+
+- **Searched for:** the Windows account name, the git handle, personal email domains, any `@` address, home and drive paths (`C:\Users`, `E:\`, `/Users/`, `/home/`), the parent folder names, and the new contact and donation strings.
+- **Result:** no personal email, local path, account name, or hostname in any tracked file or in history. The only `@` matches are the public mailing-list address `aur-general@lists.archlinux.org`, inside source URLs.
+- **Commit identity:** every commit uses a pseudonymous handle with a GitHub noreply address (`...@users.noreply.github.com`), not a personal email. That handle and address become public if the repository is pushed.
+- **Outside the repository, not a leak:** the Windows account name appears in file ownership and in the path of the global git config. Neither is stored in the repository.
+- **Choice for the owner:** the Ko-fi handle in the README differs from the handle on the commits. Publishing the repository puts both in one place and links them. This file deliberately does not name either handle.
+- **Limits:** a pattern search. It cannot find personal data it was not told to look for, such as a real name written in prose.
 
 ## Left unchanged, with reasons
 

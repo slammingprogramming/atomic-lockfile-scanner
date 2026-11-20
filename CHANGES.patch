@@ -1,13 +1,15 @@
 --- a/atomic-arch-check.sh
 +++ b/atomic-arch-check.sh
-@@ -1,5 +1,6 @@
+@@ -1,5 +1,8 @@
  #!/usr/bin/env bash
  # Atomic Arch / atomic-lockfile AUR campaign check
 +# Read-only heuristic scan: writes no files. Exit 0 = no findings, 1 = findings. See ../README.md.
++# Contact (SimpleX): https://smp14.simplex.im/a#3gZ-zeHs4QrFZKLAN0o3SC_XQJXhj1eYBVTO_c0FAtg
++# Support (optional): https://ko-fi.com/scenprogramming  Crypto addresses: ../README.md
  # Sources:
  # - https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/FGXPCB3ZVCJIV7FX323SBAX2JHYB7ZS4/
  # - https://www.sonatype.com/blog/atomic-arch-npm-campaign-adds-malicious-dependency
-@@ -7,14 +8,16 @@
+@@ -7,14 +10,16 @@
  set -uo pipefail
  
  # Malicious npm dep names this campaign rotates through, plus the payload path.
@@ -27,7 +29,7 @@
  OBF_MACHINERY='(base64|base32)[[:space:]]+-{1,2}[A-Za-z]*[dD]|xxd[[:space:]]+-[A-Za-z]*r|(curl|wget)[^|]*[|][[:space:]]*(sh|bash|zsh|dash)([^[:alnum:]_]|$)|(^|[;&|(){}`])[[:space:]]*eval[[:space:]]+["$(`]|\$'"'"'\\(x[0-9a-fA-F]|[0-7])'
  
  # Shell-startup tamper: scriptlet writing (> >> tee) into a SYSTEM /etc shell init
-@@ -30,19 +33,26 @@
+@@ -30,19 +35,26 @@
  }
  pm_match() {       # install scriptlet / hook: ANY JS pkg mgr at install time is the red flag
    _is_text "$1" || return 1
@@ -61,7 +63,7 @@
  }
  pm_scan() {    # pm_scan <matcher-fn> <name-glob> <root>...  ->  prints files the matcher flags.
    local fn=$1 glob=$2; shift 2          # honors $PM_MAXDEPTH so a per-package scan can be
-@@ -53,8 +63,25 @@
+@@ -53,8 +65,25 @@
    done < <(find "$@" "${md[@]}" -type f -name "$glob" -print0 2>/dev/null)
  }
  
@@ -88,7 +90,7 @@
  CAMPAIGN_START='2026-06-09' # Sources vary but this is the earliest observed date of activity I found
  
  # Community-maintained reported-compromised package list (Arch HedgeDoc). Edit if it moves.
-@@ -95,7 +122,12 @@
+@@ -95,7 +124,12 @@
        ts=$1; gsub(/[][]/,"",ts); d=substr(ts,1,10)
        for(i=1;i<=NF;i++) if($i=="installed"||$i=="upgraded") print d, $(i+1)
      }' "$log" 2>/dev/null)
@@ -102,7 +104,7 @@
    last=$(printf '%s\n' "$foreign" | awk 'NF' | sort | tail -1)
    window_hits=$(printf '%s\n' "$foreign" | awk -v s="$CAMPAIGN_START" 'NF && $1 >= s' | sort -u)
    if [ -n "$window_hits" ]; then
-@@ -146,14 +178,14 @@
+@@ -146,14 +180,14 @@
  hits=$(printf '%s\n' "$hits" | sed '/^$/d' | sort -u)
  if [ -n "$hits" ]; then
    echo                                      # break off the inline progress label
@@ -119,7 +121,7 @@
    echo
    nb_hits=$((nb_hits+1))
  else
-@@ -175,13 +207,16 @@
+@@ -175,13 +209,16 @@
          fetch=$(curl -fsSL --max-time 20 "$LIST_URL" 2>/dev/null)
        else
          fetch=$(wget -qO- --timeout=20 "$LIST_URL" 2>/dev/null)
@@ -137,7 +139,7 @@
    reported=$(printf '%s' "$fetch" | tr -s ' \t\r\n' '\n' \
               | grep -E '^[a-zA-Z0-9][a-zA-Z0-9@._+-]+$' | sort -u)
    match=$(comm -12 <(pacman -Qmq 2>/dev/null | sort -u) <(printf '%s\n' "$reported"))
-@@ -231,11 +266,16 @@
+@@ -231,11 +268,16 @@
  # systemd persistence fingerprint (Restart=always + RestartSec=30).
  printf "  - Scan for systemd persistence fingerprint... "
  review=""
@@ -156,7 +158,7 @@
    fi
  done
  if [ -n "$review" ]; then
-@@ -282,15 +322,18 @@
+@@ -282,15 +324,18 @@
    # pinned it at one of the known IOC names, and a rootkit hiding pins from getdents64
    # can hide them from stat() too.
    ebpf_scan() {
@@ -182,7 +184,7 @@
        # Known-IOC names => hard hit on stdout (counts toward findings).
        printf '%s\n' "$all" | grep -Eo 'hidden_(pids|names|inodes)' | sort -u
        # Triage the rest: collapse each map to one line (id/type/name/owner) and
-@@ -325,13 +368,20 @@
+@@ -325,13 +370,20 @@
          echo "      (all maps belong to known system services; nothing unexpected)" >&2
        fi
        # Report the review count back to the caller
@@ -203,7 +205,7 @@
      fi
    }
    echo "    Will use 'bpftool' if available, else direct stat(), to dodge a compromised getdents64()."
-@@ -352,12 +402,12 @@
+@@ -352,12 +404,12 @@
          echo
          continue ;;
        [yY]*)
@@ -219,7 +221,7 @@
          echo
          if [ -n "$maps" ]; then
            echo "    FOUND:"
-@@ -365,10 +415,18 @@
+@@ -365,10 +417,18 @@
            echo "      │"
            echo "      └─ [!] eBPF rootkit maps present; treat the host as fully compromised."
            nb_hits=$((nb_hits+1))
@@ -240,7 +242,7 @@
          fi
          break ;;
        *)
-@@ -377,7 +435,7 @@
+@@ -377,7 +437,7 @@
      esac
    done
  else
@@ -249,7 +251,7 @@
  fi
  echo
  
-@@ -387,11 +445,18 @@
+@@ -387,11 +447,18 @@
  if [ "$nb_hits" -eq 0 ]; then
    echo "LIKELY CLEAN: no Atomic Arch payload found."
    echo "$lightrule"
@@ -270,7 +272,7 @@
    echo "$lightrule"
    echo "This payload is a credential stealer. If it ran, act now:"
    echo
-@@ -406,3 +471,8 @@
+@@ -406,3 +473,8 @@
    echo "     prefer 'npm install --ignore-scripts' for any manual npm/bun use."
  fi
  echo "$rule"

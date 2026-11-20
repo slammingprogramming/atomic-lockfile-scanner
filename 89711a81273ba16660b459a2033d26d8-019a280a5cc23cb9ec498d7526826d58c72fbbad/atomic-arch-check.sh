@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Atomic Arch / atomic-lockfile AUR campaign check
 # Read-only heuristic scan: writes no files. Exit 0 = no findings, 1 = findings. See ../README.md.
+# Contact (SimpleX): https://smp14.simplex.im/a#3gZ-zeHs4QrFZKLAN0o3SC_XQJXhj1eYBVTO_c0FAtg
+# Support (optional): https://ko-fi.com/scenprogramming  Crypto addresses: ../README.md
 # Sources:
 # - https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/FGXPCB3ZVCJIV7FX323SBAX2JHYB7ZS4/
 # - https://www.sonatype.com/blog/atomic-arch-npm-campaign-adds-malicious-dependency

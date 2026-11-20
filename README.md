@@ -117,3 +117,22 @@ Results: the current script passes 52/52. The version as received passes 21 and 
   - https://ioctl.fail/preliminary-analysis-of-aur-malware/
 - Known-package list the script downloads (when you say yes): https://md.archlinux.org/s/SxbqukK6IA/download
 - Original gist: see `link for source.txt`.
+
+## Contact and support
+
+Questions, bug reports, and new indicators are welcome.
+
+- Contact (SimpleX): https://smp14.simplex.im/a#3gZ-zeHs4QrFZKLAN0o3SC_XQJXhj1eYBVTO_c0FAtg
+- Fiat donation (Ko-fi): https://ko-fi.com/scenprogramming
+
+Donations are optional. Crypto addresses:
+
+| Coin | Address |
+|---|---|
+| Bitcoin (BTC) | `sp1qq2637t6ve9zp4wh0e4ly2u7h7jwfn0k6c4535lxpp3wrqvmkua6xjqkwevyz0wwqx5ly2f0q29qh48wgf9gl0zt049za9kr9m8xgkey4cyggxa0x` |
+| Ethereum (ETH) | `0x8F238db898102125Fd968ed7CaD959Cb594a7e93` |
+| Monero (XMR) | `8AYK93mQEzsFFEFkuPN7wC9rPcXCyEXa1Ye5bH9U2GR3PpaZiYc84SxjMcdSdVMaaQUGmCXYkuxdDSG5bM3EVyqR25nbumV` |
+
+- The Bitcoin address starts with `sp1`, which marks a silent payment address (BIP 352). Only wallets that support silent payments can send to it.
+- The script does not print, fetch, or send any of this. It is documentation only.
+- Anyone can alter a copy of this file. Before sending a large amount, confirm the address with the maintainer through the contact link above.
