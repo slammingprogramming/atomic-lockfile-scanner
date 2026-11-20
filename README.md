@@ -4,6 +4,10 @@ A read-only, heuristic checker for the "Atomic Arch" AUR/npm campaign on Arch Li
 
 A clean result means "no known indicator was found". It does not prove the machine is clean. See [Limitations](#limitations).
 
+## Status
+
+Experimental. The tests run on synthetic fixture trees with stubbed `pacman`, `bpftool`, and `mountpoint`. The scanner has not been run on a real Arch system yet; the interactive prompts and the eBPF path in particular were checked by reading only. Treat the output as a lead to check by hand, not as a verdict.
+
 ## Files
 
 | Path | What it is |
@@ -13,6 +17,9 @@ A clean result means "no known indicator was found". It does not prove the machi
 | `CHANGES.md` | Every change made in review, with the reason and the evidence, and what was left alone and why. |
 | `CHANGES.patch` | Exact diff of the scanner against the version as received. |
 | `link for source.txt` | Link to the original gist. |
+| `SECURITY.md` | How to report a vulnerability in the scanner. |
+| `CONTRIBUTING.md` | Rules for changes, and what the test harness depends on. |
+| `.github/` | CI workflow, Dependabot config, funding link. |
 
 ## Quick start
 
@@ -116,7 +123,13 @@ Results: the current script passes 52/52. The version as received passes 21 and 
   - https://www.sonatype.com/blog/atomic-arch-npm-campaign-adds-malicious-dependency
   - https://ioctl.fail/preliminary-analysis-of-aur-malware/
 - Known-package list the script downloads (when you say yes): https://md.archlinux.org/s/SxbqukK6IA/download
-- Original gist: see `link for source.txt`.
+- Original gist: https://gist.github.com/arbaes/e29e68d9ed1513ddd80ae9cc4a6c9f0e
+
+## Origin and licence
+
+The scanner is based on a script published as a GitHub gist by `arbaes` (link above). The commit tagged `as-received` holds that script unchanged. This repository adds a review (`CHANGES.md`), a test suite, and documentation.
+
+The original script was published without a licence, and none has been added here. This repository is published in good faith for the benefit of the community. That is not a licence: without one, no reuse rights are granted, so treat the licence status as unresolved. If you are the original author and want the work licensed, credited, or removed differently, use the contact link below.
 
 ## Contact and support
 

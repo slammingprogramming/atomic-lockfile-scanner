@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Syntax check
+        run: |
+          bash -n 89711a81273ba16660b459a2033d26d8-019a280a5cc23cb9ec498d7526826d58c72fbbad/atomic-arch-check.sh
+          bash -n tests/run-tests.sh
+      - name: ShellCheck (informational, never run locally before this)
+        continue-on-error: true
+        run: shellcheck --severity=warning 89711a81273ba16660b459a2033d26d8-019a280a5cc23cb9ec498d7526826d58c72fbbad/atomic-arch-check.sh tests/run-tests.sh
+      - name: Tests
+        run: bash tests/run-tests.sh
+
+  # Same tests on an Arch Linux userland (coreutils, grep, sed, gawk, findutils as shipped by Arch).
+  # Informational for now: it has not been run yet, and the container runs as root. Make it
+  # required once it has passed.
+  arch:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    continue-on-error: true
+    steps:
+      - name: Install tools
+        run: pacman -Syu --noconfirm --needed bash coreutils grep sed gawk findutils git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Tests
+        run: bash tests/run-tests.sh

@@ -2,3 +2,5 @@
 # system-wide, which would check them out with CRLF, and CRLF can break a bash script.
 *.sh     text eol=lf
 *.patch  text eol=lf
+*.md     text eol=lf
+*.yml    text eol=lf

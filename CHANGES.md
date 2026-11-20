@@ -133,6 +133,15 @@ Read from the raw ioctl.fail page: `temp.sh`, `POST /api/agent`, `POST /upload` 
 - **Checksums:** the Bitcoin address passes the bech32m checksum (BIP 350, prefix `sp`); the Ethereum address passes its EIP-55 mixed-case checksum; the Monero address passes its base58 checksum and is a standard mainnet address (network byte 42). A valid checksum shows the text was copied without a typo. It does not show who controls the wallet.
 - **Limits:** nothing was checked on a network, and the wallets' ownership was not verified.
 
+### 16. Repository files for publishing (no script change)
+
+- **Reason:** requested by the owner on 2026-11-19, to prepare the repository for GitHub. The owner decided to publish as it is, on the view that the original author would want others to benefit.
+- **Change:** added `SECURITY.md`, `CONTRIBUTING.md`, `.gitignore`, `.github/workflows/ci.yml`, `.github/dependabot.yml`, and `.github/FUNDING.yml`. The README gained a Status section and an "Origin and licence" section. `.gitattributes` now keeps `*.md` and `*.yml` LF too. Commits are SSH-signed with the GitHub account's signing key, and the `as-received` tag marks the original files. The docs refer to that tag, not to commit hashes, which change whenever history is rewritten.
+- **No licence added:** the original script was published without one. The README says the licence status is unresolved and gives a contact for removal or relicensing requests. A licence for the files added here (tests and docs) is the owner's decision and is still open.
+- **CI:** an Ubuntu job (syntax check, ShellCheck, tests) and an Arch Linux container job. ShellCheck and the Arch job are informational (`continue-on-error`) because neither has run yet; ShellCheck is not installed on the machine used here. `actions/checkout` is pinned by commit SHA (v7.0.1, the latest release at the time) and Dependabot proposes updates.
+- **Evidence:** no script change. `bash tests/run-tests.sh` passes 52/52, and the YAML files parse. The workflows have not been run on GitHub.
+- **Not done:** renaming the hash-named script directory. The owner is considering it.
+
 ## Test harness (new file, not a change to the scanner)
 
 `tests/run-tests.sh` was written for this review. It has 52 checks.
@@ -211,3 +220,7 @@ No script change came out of this. Rule 1 (a change needs a stated reason and a 
 | `CHANGES.md` | New (this file) |
 | `CHANGES.patch` | New (diff of the script against the version as received) |
 | `.gitattributes` | New (keeps `*.sh` and `*.patch` LF; `core.autocrlf=true` on this machine would otherwise check them out with CRLF) |
+| `SECURITY.md` | New (how to report a vulnerability) |
+| `CONTRIBUTING.md` | New (rules for changes) |
+| `.gitignore` | New |
+| `.github/` | New (CI workflow, Dependabot, funding link) |
