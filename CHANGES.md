@@ -138,7 +138,7 @@ Read from the raw ioctl.fail page: `temp.sh`, `POST /api/agent`, `POST /upload` 
 - **Reason:** requested by the owner on 2026-11-19, to prepare the repository for GitHub. The owner decided to publish as it is, on the view that the original author would want others to benefit.
 - **Change:** added `SECURITY.md`, `CONTRIBUTING.md`, `.gitignore`, `.github/workflows/ci.yml`, `.github/dependabot.yml`, and `.github/FUNDING.yml`. The README gained a Status section and an "Origin and licence" section. `.gitattributes` now keeps `*.md` and `*.yml` LF too. Commits are SSH-signed with the GitHub account's signing key, and the `as-received` tag marks the original files. The docs refer to that tag, not to commit hashes, which change whenever history is rewritten.
 - **No licence added:** the original script was published without one. The README says the licence status is unresolved and gives a contact for removal or relicensing requests. A licence for the files added here (tests and docs) was settled later (change 18).
-- **CI:** an Ubuntu job (syntax check, ShellCheck, tests) and an Arch Linux container job. ShellCheck and the Arch job are informational (`continue-on-error`) because neither has run yet; ShellCheck is not installed on the machine used here. `actions/checkout` is pinned by commit SHA (v7.0.1, the latest release at the time) and Dependabot proposes updates.
+- **CI:** an Ubuntu job (syntax check, ShellCheck, tests) and an Arch Linux container job. ShellCheck and the Arch job are informational (`continue-on-error`) because neither has run yet; ShellCheck is not installed on the machine used here. Both were made required in change 19. `actions/checkout` is pinned by commit SHA (v7.0.1, the latest release at the time) and Dependabot proposes updates.
 - **Evidence:** no script change. `bash tests/run-tests.sh` passes 52/52, and the YAML files parse. The workflows have not been run on GitHub.
 - **Not done here:** renaming the hash-named script directory. Done later (change 17).
 
@@ -155,6 +155,15 @@ Read from the raw ioctl.fail page: `temp.sh`, `POST /api/agent`, `POST /upload` 
 - **Change:** added `LICENSE` with the AGPL-3.0 text. Rewrote "Origin and licence" in the README, added a licence-of-contributions section to `CONTRIBUTING.md`, added an SPDX identifier line to `tests/run-tests.sh`, and made `.gitattributes` keep `LICENSE` LF. No change to the scanner.
 - **Scope, on purpose:** the licence covers files written for this repository, and only the changes made to the scanner. The original script has no stated licence, and this repository cannot relicense it, so the README says so plainly and gives a contact for the original author.
 - **Evidence:** the `LICENSE` text was fetched from gnu.org and is identical to GitHub's own copy of AGPL-3.0 after whitespace normalisation (661 lines, no CR). `bash -n` is clean and `tests/run-tests.sh` still passes 52/52. There is no behaviour to test.
+
+### 19. CI made blocking; repository settings recorded (no script change)
+
+- **Reason:** requested by the owner on 2026-11-21 ("work through all that"), after the first CI run on GitHub.
+- **What the first run showed** (log read with `gh run view --log`): the Ubuntu job passed its syntax check and 52 tests. The Arch Linux container job passed all steps, including the tests. ShellCheck reported exactly one warning in the whole repository: SC2010 (`ls | grep`) in the `pkgfile` lookup of the build-date report.
+- **Change:** removed `continue-on-error` from the ShellCheck step and from the Arch job, so both now block. ShellCheck runs with `--exclude=SC2010`, with a comment in the workflow giving the reason. The script is unchanged.
+- **Why SC2010 is excluded, not fixed:** see "Left unchanged", item 12. It is not a defect, so under rule 1 a rewrite would need a reason and a failing test, and it has neither.
+- **Repository settings** (set with the GitHub CLI on 2026-11-21, so not visible in the files): a description and eight topics; a repository ruleset "Require signed commits on main" with enforcement active, applying to the default branch, with no bypass actors. The "flag unsigned commits as unverified" (vigilant mode) account setting is the owner's and is not recorded here.
+- **Evidence:** the workflow YAML parses, and `bash -n` and `tests/run-tests.sh` still pass 52/52 locally. The changed workflow has not yet run on GitHub when this entry was written, and ShellCheck was not run locally, so the first run after this change is the real check.
 
 ## Test harness (new file, not a change to the scanner)
 
@@ -192,6 +201,7 @@ Requested by the owner. Scope: the 8 tracked files, the full content of all comm
 9. **`RestartSec=30` is matched exactly.** Narrow on purpose. Broadening the fingerprint would add noise.
 10. **`[ -t 0 ]` gating kept.** The script must never prompt during automation.
 11. **Hard-coded `LIST_URL` and `CAMPAIGN_START`.** Kept. The script comments say to edit them when they change.
+12. **ShellCheck SC2010 (`ls | grep`) in the `pkgfile` lookup.** The line finds the first cached package file for a package and version, skipping `.sig` files, and only prints an informational "pkgfile" line. Pacman cache names are `name-version-arch.pkg.tar.*`, which cannot contain newlines, so the case SC2010 guards against cannot occur. A glob-and-loop rewrite would change a line that works, to silence a warning, with no failing test to show for it. Excluded in CI instead, with a comment (change 19).
 
 ## Open items (not verifiable here)
 

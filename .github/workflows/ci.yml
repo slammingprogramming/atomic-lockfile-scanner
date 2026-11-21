@@ -17,19 +17,20 @@ jobs:
         run: |
           bash -n atomic-arch-check.sh
           bash -n tests/run-tests.sh
-      - name: ShellCheck (informational, never run locally before this)
-        continue-on-error: true
-        run: shellcheck --severity=warning atomic-arch-check.sh tests/run-tests.sh
+      # SC2010 (ls | grep) is excluded on purpose: it is the only warning, in the optional
+      # "pkgfile" line of the build-date report. Pacman cache names cannot contain newlines,
+      # so the case it guards against cannot occur. See CHANGES.md, "Left unchanged".
+      - name: ShellCheck
+        run: shellcheck --severity=warning --exclude=SC2010 atomic-arch-check.sh tests/run-tests.sh
       - name: Tests
         run: bash tests/run-tests.sh
 
   # Same tests on an Arch Linux userland (coreutils, grep, sed, gawk, findutils as shipped by Arch).
-  # Informational for now: it has not been run yet, and the container runs as root. Make it
-  # required once it has passed.
+  # It passed on its first run (as root, in a container), so it is required. It is not a real
+  # Arch system: pacman state, bpftool, and eBPF are still stubbed.
   arch:
     runs-on: ubuntu-latest
     container: archlinux:latest
-    continue-on-error: true
     steps:
       - name: Install tools
         run: pacman -Syu --noconfirm --needed bash coreutils grep sed gawk findutils git
