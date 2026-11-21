@@ -12,7 +12,7 @@ Experimental. The tests run on synthetic fixture trees with stubbed `pacman`, `b
 
 | Path | What it is |
 |---|---|
-| `89711a81273ba16660b459a2033d26d8-019a280a5cc23cb9ec498d7526826d58c72fbbad/atomic-arch-check.sh` | The scanner. The only file that runs on your system. |
+| `atomic-arch-check.sh` | The scanner. The only file that runs on your system. |
 | `tests/run-tests.sh` | Regression tests for the scanner (52 checks). |
 | `CHANGES.md` | Every change made in review, with the reason and the evidence, and what was left alone and why. |
 | `CHANGES.patch` | Exact diff of the scanner against the version as received. |
@@ -24,7 +24,7 @@ Experimental. The tests run on synthetic fixture trees with stubbed `pacman`, `b
 ## Quick start
 
 ```bash
-bash "89711a81273ba16660b459a2033d26d8-019a280a5cc23cb9ec498d7526826d58c72fbbad/atomic-arch-check.sh"
+bash atomic-arch-check.sh
 echo "exit status: $?"
 ```
 

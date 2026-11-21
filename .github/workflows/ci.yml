@@ -15,11 +15,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Syntax check
         run: |
-          bash -n 89711a81273ba16660b459a2033d26d8-019a280a5cc23cb9ec498d7526826d58c72fbbad/atomic-arch-check.sh
+          bash -n atomic-arch-check.sh
           bash -n tests/run-tests.sh
       - name: ShellCheck (informational, never run locally before this)
         continue-on-error: true
-        run: shellcheck --severity=warning 89711a81273ba16660b459a2033d26d8-019a280a5cc23cb9ec498d7526826d58c72fbbad/atomic-arch-check.sh tests/run-tests.sh
+        run: shellcheck --severity=warning atomic-arch-check.sh tests/run-tests.sh
       - name: Tests
         run: bash tests/run-tests.sh
 

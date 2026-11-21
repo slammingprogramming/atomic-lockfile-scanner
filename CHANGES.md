@@ -2,7 +2,7 @@
 
 Review of `atomic-arch-check.sh` and the test harness added around it. Each change lists the reason and the evidence. Items that were checked and deliberately left alone are in [Left unchanged](#left-unchanged-with-reasons). `CHANGES.patch` is the exact diff.
 
-Committed in a git repository (branch `main`). The tag `as-received` marks the files exactly as received; the commits after it hold this review. `git diff as-received -- 89711a81273ba16660b459a2033d26d8-019a280a5cc23cb9ec498d7526826d58c72fbbad/atomic-arch-check.sh` shows the same change as `CHANGES.patch`.
+Committed in a git repository (branch `main`). The tag `as-received` marks the files exactly as received; the commits after it hold this review. The script was later moved to the repository root (change 17). To reproduce `CHANGES.patch`: `git diff as-received:89711a81273ba16660b459a2033d26d8-019a280a5cc23cb9ec498d7526826d58c72fbbad/atomic-arch-check.sh HEAD:atomic-arch-check.sh`.
 
 ## Method
 
@@ -98,7 +98,7 @@ Three separate paths, all reporting a result they had not established:
 
 ### 11. Header comment (documentation)
 
-- **Added:** `Read-only heuristic scan: writes no files. Exit 0 = no findings, 1 = findings. See ../README.md.`
+- **Added:** `Read-only heuristic scan: writes no files. Exit 0 = no findings, 1 = findings. See README.md.`
 - **Reason:** the behaviour was undocumented in the file. The "writes no files" claim was checked: no executable line redirects output to a file or runs a file-changing command (`tee`, `mv`, `rm`, `cp`, `chmod`, `mkdir`, `touch`). Matches were inside regex strings, `->` text, and comments.
 
 ### 12. Exec-mechanism comment corrected (documentation)
@@ -141,6 +141,13 @@ Read from the raw ioctl.fail page: `temp.sh`, `POST /api/agent`, `POST /upload` 
 - **CI:** an Ubuntu job (syntax check, ShellCheck, tests) and an Arch Linux container job. ShellCheck and the Arch job are informational (`continue-on-error`) because neither has run yet; ShellCheck is not installed on the machine used here. `actions/checkout` is pinned by commit SHA (v7.0.1, the latest release at the time) and Dependabot proposes updates.
 - **Evidence:** no script change. `bash tests/run-tests.sh` passes 52/52, and the YAML files parse. The workflows have not been run on GitHub.
 - **Not done:** renaming the hash-named script directory. The owner is considering it.
+
+### 17. Script moved to the repository root (usability)
+
+- **Reason:** requested by the owner on 2026-11-19, after the option was explained. The script lived at `89711a81273ba16660b459a2033d26d8-019a280a5cc23cb9ec498d7526826d58c72fbbad/atomic-arch-check.sh`. That directory name is an identifier from how the script reached the owner, and it made every copied command, clone path, and CI line long. At the root the path is `atomic-arch-check.sh`.
+- **Change:** `git mv` to the root. Updated the test harness default path, the README, the CI workflow, and this file. The two header comments in the script that said `../README.md` now say `README.md`. No code or behaviour change. `CHANGES.patch` was regenerated; it differs only in those two comment lines.
+- **Provenance:** the `as-received` tag keeps the original path. A path-limited `git diff as-received -- <path>` no longer follows the move, so this file gives a blob-to-blob command at the top.
+- **Evidence:** there is no behaviour to test, so there is no failing-first test, as with changes 11, 12, 15, and 16. `bash -n` is clean. `tests/run-tests.sh` passes 52/52 using its default path, which now points at the root script. Run against the version as received, by path, it still gives 21 passed and 31 failed.
 
 ## Test harness (new file, not a change to the scanner)
 
@@ -214,7 +221,7 @@ No script change came out of this. Rule 1 (a change needs a stated reason and a 
 
 | Path | Status |
 |---|---|
-| `89711a81273ba16660b459a2033d26d8-019a280a5cc23cb9ec498d7526826d58c72fbbad/atomic-arch-check.sh` | Modified (changes 1–12) |
+| `atomic-arch-check.sh` | Modified (changes 1–12, 15); moved here from `89711a81273ba16660b459a2033d26d8-019a280a5cc23cb9ec498d7526826d58c72fbbad/` (change 17) |
 | `tests/run-tests.sh` | New |
 | `README.md` | New |
 | `CHANGES.md` | New (this file) |

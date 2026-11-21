@@ -13,7 +13,7 @@
 # Exit status: 0 = all tests passed, 1 = at least one failed, 2 = setup error.
 
 HERE=$(cd "$(dirname "$0")" && pwd) || exit 2
-SCRIPT=${1:-$HERE/../89711a81273ba16660b459a2033d26d8-019a280a5cc23cb9ec498d7526826d58c72fbbad/atomic-arch-check.sh}
+SCRIPT=${1:-$HERE/../atomic-arch-check.sh}
 [ -r "$SCRIPT" ] || { echo "cannot read: $SCRIPT" >&2; exit 2; }
 WORK=$(mktemp -d) || exit 2
 trap '[ -n "${KEEP:-}" ] || rm -rf "$WORK"' EXIT
