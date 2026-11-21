@@ -19,4 +19,8 @@ Bug reports, false-positive reports, and new indicators are welcome. A new indic
 
 Keep them small and say what the reason and the evidence are. Do not include personal information, tokens, or paths from your own machine. Signed commits are appreciated.
 
+## Licence of contributions
+
+By submitting a contribution you agree that it is licensed under AGPL-3.0-or-later. How that applies to `atomic-arch-check.sh`, which is derived from a script with no stated licence, is explained in the "Origin and licence" section of `README.md`.
+
 Questions and private reports: see `SECURITY.md`.

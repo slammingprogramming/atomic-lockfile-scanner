@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Regression tests for atomic-arch-check.sh.
 #
 #   bash tests/run-tests.sh [path/to/atomic-arch-check.sh]

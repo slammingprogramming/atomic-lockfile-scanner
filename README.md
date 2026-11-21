@@ -129,7 +129,11 @@ Results: the current script passes 52/52. The version as received passes 21 and 
 
 The scanner is based on a script published as a GitHub gist by `arbaes` (link above). The commit tagged `as-received` holds that script unchanged. This repository adds a review (`CHANGES.md`), a test suite, and documentation.
 
-The original script was published without a licence, and none has been added here. This repository is published in good faith for the benefit of the community. That is not a licence: without one, no reuse rights are granted, so treat the licence status as unresolved. If you are the original author and want the work licensed, credited, or removed differently, use the contact link below.
+### Licence
+
+- **Files written for this repository** (the test suite in `tests/`, `README.md`, `CHANGES.md`, `CONTRIBUTING.md`, `SECURITY.md`, and the CI and configuration files) are licensed under the GNU Affero General Public License, version 3 or later (AGPL-3.0-or-later). The full text is in `LICENSE`. Copyright (C) 2026 SlammingProgramming.
+- **The scanner, `atomic-arch-check.sh`**, and `CHANGES.patch`, which quotes it. The original script was published without a licence, and this repository has no permission from its author to relicense it. The changes made to it here are offered under AGPL-3.0-or-later, but that covers only those changes. The original code stays the original author's, with no licence stated, so this repository grants no reuse rights in the script as a whole.
+- This repository is published in good faith for the benefit of the community. If you are the original author and want the work licensed, credited, or removed differently, use the contact link below.
 
 ## Contact and support
 

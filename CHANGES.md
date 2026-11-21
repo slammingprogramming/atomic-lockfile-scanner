@@ -137,10 +137,10 @@ Read from the raw ioctl.fail page: `temp.sh`, `POST /api/agent`, `POST /upload` 
 
 - **Reason:** requested by the owner on 2026-11-19, to prepare the repository for GitHub. The owner decided to publish as it is, on the view that the original author would want others to benefit.
 - **Change:** added `SECURITY.md`, `CONTRIBUTING.md`, `.gitignore`, `.github/workflows/ci.yml`, `.github/dependabot.yml`, and `.github/FUNDING.yml`. The README gained a Status section and an "Origin and licence" section. `.gitattributes` now keeps `*.md` and `*.yml` LF too. Commits are SSH-signed with the GitHub account's signing key, and the `as-received` tag marks the original files. The docs refer to that tag, not to commit hashes, which change whenever history is rewritten.
-- **No licence added:** the original script was published without one. The README says the licence status is unresolved and gives a contact for removal or relicensing requests. A licence for the files added here (tests and docs) is the owner's decision and is still open.
+- **No licence added:** the original script was published without one. The README says the licence status is unresolved and gives a contact for removal or relicensing requests. A licence for the files added here (tests and docs) was settled later (change 18).
 - **CI:** an Ubuntu job (syntax check, ShellCheck, tests) and an Arch Linux container job. ShellCheck and the Arch job are informational (`continue-on-error`) because neither has run yet; ShellCheck is not installed on the machine used here. `actions/checkout` is pinned by commit SHA (v7.0.1, the latest release at the time) and Dependabot proposes updates.
 - **Evidence:** no script change. `bash tests/run-tests.sh` passes 52/52, and the YAML files parse. The workflows have not been run on GitHub.
-- **Not done:** renaming the hash-named script directory. The owner is considering it.
+- **Not done here:** renaming the hash-named script directory. Done later (change 17).
 
 ### 17. Script moved to the repository root (usability)
 
@@ -148,6 +148,13 @@ Read from the raw ioctl.fail page: `temp.sh`, `POST /api/agent`, `POST /upload` 
 - **Change:** `git mv` to the root. Updated the test harness default path, the README, the CI workflow, and this file. The two header comments in the script that said `../README.md` now say `README.md`. No code or behaviour change. `CHANGES.patch` was regenerated; it differs only in those two comment lines.
 - **Provenance:** the `as-received` tag keeps the original path. A path-limited `git diff as-received -- <path>` no longer follows the move, so this file gives a blob-to-blob command at the top.
 - **Evidence:** there is no behaviour to test, so there is no failing-first test, as with changes 11, 12, 15, and 16. `bash -n` is clean. `tests/run-tests.sh` passes 52/52 using its default path, which now points at the root script. Run against the version as received, by path, it still gives 21 passed and 31 failed.
+
+### 18. Licence for the files written in this repository (documentation)
+
+- **Reason:** the owner chose AGPL-3.0-or-later for their own files on 2026-11-21, and asked for the GitHub remote to be set up.
+- **Change:** added `LICENSE` with the AGPL-3.0 text. Rewrote "Origin and licence" in the README, added a licence-of-contributions section to `CONTRIBUTING.md`, added an SPDX identifier line to `tests/run-tests.sh`, and made `.gitattributes` keep `LICENSE` LF. No change to the scanner.
+- **Scope, on purpose:** the licence covers files written for this repository, and only the changes made to the scanner. The original script has no stated licence, and this repository cannot relicense it, so the README says so plainly and gives a contact for the original author.
+- **Evidence:** the `LICENSE` text was fetched from gnu.org and is identical to GitHub's own copy of AGPL-3.0 after whitespace normalisation (661 lines, no CR). `bash -n` is clean and `tests/run-tests.sh` still passes 52/52. There is no behaviour to test.
 
 ## Test harness (new file, not a change to the scanner)
 
@@ -231,3 +238,4 @@ No script change came out of this. Rule 1 (a change needs a stated reason and a 
 | `CONTRIBUTING.md` | New (rules for changes) |
 | `.gitignore` | New |
 | `.github/` | New (CI workflow, Dependabot, funding link) |
+| `LICENSE` | New (AGPL-3.0 text) |
